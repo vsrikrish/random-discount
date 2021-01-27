@@ -19,7 +19,7 @@ create_prior_list <- function(prior_df) {
     } else if (priors[[name]][['type']] == 'log-normal') {
       priors[[name]][['dens.fun']] <- 'dlnorm'
       priors[[name]][['meanlog']] <- mean(c(log(prior_df[i, 'lower']), log(prior_df[i, 'upper'])))
-      priors[[name]][['sdlog']] <- (log(prior_df[i, 'upper']) - log(prior_df[i, 'lower'])) / (qnorm(0.95) - qnorm(0.05))
+      priors[[name]][['sdlog']] <- (log(prior_df[i, 'upper']) - log(prior_df[i, 'lower'])) / (qnorm(0.975) - qnorm(0.025))
     } else if (priors[[name]][['type']] == 'truncnorm') {
       require(truncnorm)
       priors[[name]][['dens.fun']] <- 'dtruncnorm'

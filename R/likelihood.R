@@ -1,7 +1,8 @@
+source('R/filter.R')
+
 ## log_pri
 # compute prior densities
 log_pri <- function(pars, parnames, priors) {
-  
   # this function evaluates the log-prior density for a given parameter
   log_dens <- function(p) {
     val <- pars[match(p, parnames)]
@@ -32,39 +33,20 @@ compute_residuals <- function(pars, parnames, dat, type) {
 
 # run the Kalman filter given the passed matrices and return the log-likelihood
 log_lik_kf <- function(r, S, Z, R, Q) {
+  # run Kalman filter
+  kf_out <- kf(r, S, Z, R, Q)
   # get length of data series
   N <- length(r)
-  # find initial covariance and state estimate
-  P0 <- matrix(solve(diag(dim(S)[1]^2) - kronecker(S, S)) %*% as.numeric(R %*% Q %*% t(R)), ncol=3)
-  a0 <- c(0, 0, 0)
-  
-  # set up storage for estimates
-  v <- array(NA, dim=c(1, 1, N))
-  G <- array(NA, dim=c(1, 1, N))
-  P <- array(NA, dim=c(3, 3, N))
-  a <- matrix(0, nrow=N, ncol=3)
   ll <- numeric(N)
-  
-  # store initial values for the filter
-  a[1,] <- a0
-  P[,,1] <- P0
-
-  # run the filter and compute log-likelihod components
-  for (t in 2:N) {
-    v[,,t-1] <- r[t-1] - Z %*% a[t-1,]
-    G[,,t-1] <- Z %*% P[,,t-1] %*% t(Z)
-    ll[t-1] <- log(abs(G[,,t-1])) + t(v[,,t-1]) %*% solve(G[,,t-1]) %*% v[,,t-1]
-    at <- a[t-1,] + (P[,,t-1] %*% t(Z)  %*% solve(G[,,t-1]) %*% v[,,t-1])
-    Pt <- P[,,t-1] - (P[,,t-1] %*% t(Z) %*% solve(G[,,t-1]) %*% Z %*% P[,,t-1])
-#    ll[t-1] <- log(abs(G)) + (v %*% solve(G) %*% v) # compute the log 
-    a[t,] <- S %*% at
-    P[,,t] <- (S %*% Pt %*% solve(S)) + (R %*% Q %*% t(R))
+  for (t in 1:N) {
+    ll[t] <- log(abs(kf_out$G[,,t])) + t(kf_out$v[,,t]) %*% solve(kf_out$G[,,t]) %*% kf_out$v[,,t]
   }
-  # compute log-likelihood component from last time step
-  v[,,N] <- r[t-1] - Z %*% a[t-1,]
-  G[,,N] <- Z %*% P[,,t-1] %*% t(Z) 
-  ll[N] <- log(abs(G[,,N])) + t(v[,,N]) %*% solve(G[,,N]) %*% v[,,N]
-  -0.5*(N*log(2*pi) + sum(ll)) # return log-likelihood (up to a constant)
+  ld <- -0.5*(N*log(2*pi) + sum(ll)) # compute log-likelihood (up to a constant)
+  # return list of log-likelihood and parameters needed for prediction
+  list(log.density=ld, 
+       prev.mean=kf_out$a[nrow(kf_out$a),], 
+       prev.var=kf_out$P[,,dim(kf_out$P)[3]],
+       S=S, Z=Z, R=R, Q=Q)
 }
 
 ## compute the log-likelihood of the parameters for the given model type
@@ -83,6 +65,11 @@ log_lik <- function(pars, parnames, dat, type) {
 } 
 
 log_post <- function(pars, parnames, priors, dat, type) {
+  # check the unit root constraint
+  rho <- pars[grepl('rho*', parnames)]
+  if (sum(rho) > 1) {
+    return(-Inf)
+  }
   # compute the log-prior density of the parameters
   lp <- log_pri(pars, parnames, priors)
   # if any of the parameters have zero prior density, return -Inf
@@ -90,9 +77,9 @@ log_post <- function(pars, parnames, priors, dat, type) {
     return(-Inf)
   } 
   # otherwise compute the log-likelihood
-  ll <- log_lik(pars, parnames, dat, type)
+  ll_out <- log_lik(pars, parnames, dat, type)
   # return the log-posterior density
-  ll + lp
+  ll_out[['log.density']] + lp
 }
 
 neg_log_post <- function(pars, parnames, priors, dat, type) {
