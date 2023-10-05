@@ -1,5 +1,6 @@
 library(DEoptim)
 library(adaptMCMC)
+library(readxl)
 
 source('R/likelihood.R')
 source('R/prior_list.R')
@@ -75,7 +76,8 @@ for (p in parnames) {
 priors <- create_prior_list(prior_df)
 
 # load data
-dat <- log(readRDS('data/discount.rds')$DR)
+discount_xlsx <- read_excel("data/discount.xlsx")
+dat <- c(read_excel("data/discount.xlsx", range="Real rates!K7:K231"))
 # remove NAs
 dat <- dat[!is.na(dat)]
 
